@@ -157,6 +157,7 @@ if TYPE_OF_VIDEO[NUMBER] == "Player_Detection_Video":
             annotated_frame = triangle_annotator.annotate(
                 scene=annotated_frame,
                 detections=ball_detections)
+            print(f"the shape of the frame:{annotated_frame.shape}")
             videosnk.write_frame(annotated_frame)
 
 #The part where the pitch is being detected
@@ -211,6 +212,7 @@ if TYPE_OF_VIDEO[NUMBER] == "Pitch_Detection_Video":
             annotated_frame = vertex_annotator.annotate(
                 scene=annotated_frame,
                 key_points=frame_reference_key_points)
+            print(annotated_frame.shape)
             videosnk.write_frame(annotated_frame)
 
 #combining both player and pitch detection
@@ -218,13 +220,17 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
     tracker = sv.ByteTrack()
     tracker.reset()
 
-    frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
-    videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION, video_info)
+    print(f"Video width: {video_info.width}, height: {video_info.height}, fps: {video_info.fps}")
+    videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION, video_info, codec="mp4v")
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
 
     with videosnk:
-        for frame in tqdm(frame_generator, total=video_info.total_frames, desc="Processing video"):
+        for frame_idx, frame in enumerate(tqdm(frame_generator, total=video_info.total_frames, desc="Processing video")):
+            if frame is None:
+                print(f"Frame {frame_idx} is empty.")
+                continue
+            print(f"Processing frame {frame_idx}...")
             result = PLAYER_DETECTION_MODEL.predict(frame, conf=0.3)[0]
             detections = sv.Detections.from_ultralytics(result)
 
@@ -311,8 +317,15 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
                 radius=16,
                 pitch=annotated_frame
             )
-
-            videosnk.write_frame(annotated_frame)
+            annotated_frame = cv2.resize(annotated_frame, (video_info.width, video_info.height))
+            print(f"Annotated frame shape: {annotated_frame.shape}")
+            try:
+                videosnk.write_frame(annotated_frame)
+                print(f"Frame {frame_idx} written successfully.")
+            except Exception as e:
+                print(f"Error writing frame {frame_idx}: {e}")
+    videosnk.close()
+                
 elif NUMBER == 0:
     edge_annotator = sv.EdgeAnnotator(
         color=sv.Color.from_hex('#00BFFF'),
