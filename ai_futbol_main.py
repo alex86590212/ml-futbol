@@ -14,6 +14,7 @@ from team_classifier import TeamClassifier
 from pitch_config import SoccerPitchConfiguration
 from view_transformer import ViewTransformer
 from pitch_draw import draw_pitch, draw_points_on_pitch
+from collections import defaultdict
 
 #os.makedirs("example_matches", exist_ok=True)
 #url = "https://drive.google.com/uc?id=12TqauVZ9tLAv8kWxTTBFWtgt2hNQ4_ZF"
@@ -32,8 +33,8 @@ IMAGES_FOLDER_PATH_PITCH_DETECTION = "/home2/s5549329/ml-futbol/saved_images/ano
 IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION = "/home2/s5549329/ml-futbol/saved_images/anotatted_pitch_player_video.mp4"
 IMAGES_FOLDER_PATH = "/home2/s5549329/ml-futbol/saved_images"
 
-FIELD_DTECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/best_pitch.pt")
-PLAYER_DETECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/best.pt")
+FIELD_DTECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/best_pitch_500.pt")
+PLAYER_DETECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/best_player_100.pt")
 
 CONFIG = SoccerPitchConfiguration()
 
@@ -173,7 +174,6 @@ if TYPE_OF_VIDEO[NUMBER] == "Pitch_Detection_Video":
         color=sv.Color.from_hex('#00BFFF'),
         radius=8)
 
-    frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
 
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
     videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_DETECTION, video_info)
@@ -221,9 +221,25 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
     tracker.reset()
 
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
+    video_info.fps *= 4
     print(f"Video width: {video_info.width}, height: {video_info.height}, fps: {video_info.fps}")
     videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION, video_info, codec="mp4v")
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
+
+    #saving the coordinates of each player on 2D pitch per frame
+    tracker_history = defaultdict(list)
+    last_seen_frame = {}
+
+    MAX_MISSING_FRAMES = 2
+    MIN_TRACK_LENGTH = 2
+    INTERPOLATION_DISTANCE_THRESHOLD = 100
+
+    def filter_duplicates(points, min_distance=5):
+        filtered = []
+        for p in points:
+            if all(np.linalg.norm(np.array(p) - np.array(f)) > min_distance for f in filtered):
+                filtered.append(p)
+        return filtered
 
     with videosnk:
         for frame_idx, frame in enumerate(tqdm(frame_generator, total=video_info.total_frames, desc="Processing video")):
@@ -280,22 +296,79 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
 
             players_xy = players_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
             pitch_players_xy = transformer.transform_points(points=players_xy)
-
+            
             referees_xy = referees_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
             pitch_referees_xy = transformer.transform_points(points=referees_xy)
+
+            for i, tracker_id in enumerate(players_detections.tracker_id):
+                team_id = players_detections.class_id[i]
+                player_pos = pitch_players_xy[i]
+                tracker_history[tracker_id].append((frame_idx, player_pos[0], player_pos[1], team_id))
+                last_seen_frame[tracker_id] = frame_idx
+
+
+            # interpolate multiple intermediate frames between t and t+1
+            for sub_step in range(1, 4):
+                alpha = sub_step / 4
+                interpolated_team0 = []
+                interpolated_team1 = []
+
+                for tracker_id, history in tracker_history.items():
+                    if frame_idx - last_seen_frame.get(tracker_id, -MAX_MISSING_FRAMES - 1) > MAX_MISSING_FRAMES:
+                        continue
+                    if len(history) >= MIN_TRACK_LENGTH:
+                        prev = history[-2]
+                        curr = history[-1]
+                        if curr[0] - prev[0] <= MAX_MISSING_FRAMES:
+                            x1, y1, team_id = prev[1], prev[2], prev[3]
+                            x2, y2 = curr[1], curr[2]
+
+                            dist = np.linalg.norm(np.array([x2, y2]) - np.array([x1, y1]))
+                            if dist > INTERPOLATION_DISTANCE_THRESHOLD:
+                                continue
+
+                            interp_x = (1 - alpha) * x1 + alpha * x2
+                            interp_y = (1 - alpha) * y1 + alpha * y2
+
+                            if team_id == 0:
+                                interpolated_team0.append((interp_x, interp_y))
+                            elif team_id == 1:
+                                interpolated_team1.append((interp_x, interp_y))
+
+                interpolated_team0 = filter_duplicates(interpolated_team0)[:11]
+                interpolated_team1 = filter_duplicates(interpolated_team1)[:11]
+
+                interpolated_frame = draw_pitch(CONFIG)
+                interpolated_frame = draw_points_on_pitch(CONFIG, np.array(interpolated_team0), sv.Color.from_hex('00BFFF'), sv.Color.BLACK, radius=16, pitch=interpolated_frame)
+                interpolated_frame = draw_points_on_pitch(CONFIG, np.array(interpolated_team1), sv.Color.from_hex('FF1493'), sv.Color.BLACK, radius=16, pitch=interpolated_frame)
+                interpolated_frame = draw_points_on_pitch(CONFIG, pitch_ball_xy, sv.Color.WHITE, sv.Color.BLACK, radius=10, pitch=interpolated_frame)
+                interpolated_frame = draw_points_on_pitch(CONFIG, pitch_referees_xy, sv.Color.from_hex('FFD700'), sv.Color.BLACK, radius=16, pitch=interpolated_frame)
+
+                interpolated_frame = cv2.resize(interpolated_frame, (video_info.width, video_info.height))
+                try:
+                    videosnk.write_frame(interpolated_frame)
+                except Exception as e:
+                    print(f"Error writing interpolated frame {frame_idx + alpha:.2f}: {e}")
+
+            smoothed_positions_team0 = []
+            smoothed_positions_team1 = []
+
+            for i, tracker_id in enumerate(players_detections.tracker_id):
+                team_id = players_detections.class_id[i]
+                player_pos = pitch_players_xy[i]
+
+                if team_id == 0:
+                    smoothed_positions_team0.append((player_pos[0], player_pos[1]))
+                elif team_id == 1:
+                    smoothed_positions_team1.append((player_pos[0], player_pos[1]))
+
+            smoothed_positions_team0 = filter_duplicates(smoothed_positions_team0)[:11]
+            smoothed_positions_team1 = filter_duplicates(smoothed_positions_team1)[:11]
 
             annotated_frame = draw_pitch(CONFIG)
             annotated_frame = draw_points_on_pitch(
                 config=CONFIG,
-                xy=pitch_ball_xy,
-                face_color=sv.Color.WHITE,
-                edge_color=sv.Color.BLACK,
-                radius=10,
-                pitch=annotated_frame
-            )
-            annotated_frame = draw_points_on_pitch(
-                config=CONFIG,
-                xy=pitch_players_xy[players_detections.class_id == 0],
+                xy=np.array(smoothed_positions_team0),
                 face_color=sv.Color.from_hex('00BFFF'),
                 edge_color=sv.Color.BLACK,
                 radius=16,
@@ -303,10 +376,19 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
             )
             annotated_frame = draw_points_on_pitch(
                 config=CONFIG,
-                xy=pitch_players_xy[players_detections.class_id == 1],
+                xy=np.array(smoothed_positions_team1),
                 face_color=sv.Color.from_hex('FF1493'),
                 edge_color=sv.Color.BLACK,
                 radius=16,
+                pitch=annotated_frame
+            )
+
+            annotated_frame = draw_points_on_pitch(
+                config=CONFIG,
+                xy=pitch_ball_xy,
+                face_color=sv.Color.WHITE,
+                edge_color=sv.Color.BLACK,
+                radius=10,
                 pitch=annotated_frame
             )
             annotated_frame = draw_points_on_pitch(
