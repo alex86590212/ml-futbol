@@ -8,12 +8,11 @@ import torch
 import numpy as np
 from transformers import AutoProcessor, SiglipVisionModel
 from more_itertools import chunked 
-from umap.umap_ import UMAP
-from sklearn.cluster import KMeans
+from collections import deque
 from team_classifier import TeamClassifier
 from pitch_config import SoccerPitchConfiguration
 from view_transformer import ViewTransformer
-from pitch_draw import draw_pitch, draw_points_on_pitch
+from pitch_draw import draw_pitch, draw_points_on_pitch, draw_paths_on_pitch
 from collections import defaultdict
 
 #os.makedirs("example_matches", exist_ok=True)
@@ -22,18 +21,23 @@ from collections import defaultdict
 #url = "https://drive.google.com/uc?id=1vVwjW1dE1drIdd4ZSILfbCGPD4weoNiu"
 #url_path = "/home2/s5549329/ml-futbol/example_matches/121364_0.mp4"
 #gdown.download(url, url_path, quiet=False)
+
+#url = "https://drive.google.com/uc?id=1Ma5Kt86tgpdjCTKfum79YMgNnSjcoOyf"
+#url_path = "/home2/s5549329/ml-futbol/models/downloaded_pitch.pt"
+#gdown.download(url, url_path, quiet=False)
 #Input a number of which type of video you want 
 NUMBER = 3
 
-TYPE_OF_VIDEO = {0: "None", 1: "Player_Detection_Video", 2: "Pitch_Detection_Video", 3: "All_Detection_Video"}
+TYPE_OF_VIDEO = {0: "None", 1: "Player_Detection_Video", 2: "Pitch_Detection_Video", 3: "All_Detection_Video", 4: "Ball_Detection"}
 SOURCE_VIDEO_PATH = "/home2/s5549329/ml-futbol/example_matches/121364_0.mp4"
 
 IMAGES_FOLDER_PATH_PLAYER_DETECTION = "/home2/s5549329/ml-futbol/saved_images/anottated_video.mp4"
 IMAGES_FOLDER_PATH_PITCH_DETECTION = "/home2/s5549329/ml-futbol/saved_images/anotatted_pitch_video.mp4"
 IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION = "/home2/s5549329/ml-futbol/saved_images/anotatted_pitch_player_video.mp4"
+IMAGES_FOLDER_BALL_DETECTION = "/home2/s5549329/ml-futbol/saved_images/ball_video.mp4"
 IMAGES_FOLDER_PATH = "/home2/s5549329/ml-futbol/saved_images"
 
-FIELD_DTECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/best_pitch_500.pt")
+FIELD_DETECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/downloaded_pitch.pt")
 PLAYER_DETECTION_MODEL = YOLO("/home2/s5549329/ml-futbol/models/best_player_100.pt")
 
 CONFIG = SoccerPitchConfiguration()
@@ -161,86 +165,24 @@ if TYPE_OF_VIDEO[NUMBER] == "Player_Detection_Video":
             print(f"the shape of the frame:{annotated_frame.shape}")
             videosnk.write_frame(annotated_frame)
 
-#The part where the pitch is being detected
-if TYPE_OF_VIDEO[NUMBER] == "Pitch_Detection_Video": 
-
-    edge_annotator = sv.EdgeAnnotator(
-        color=sv.Color.from_hex('#00BFFF'),
-        thickness=2, edges=CONFIG.edges)
-    vertex_annotator = sv.VertexAnnotator(
-        color=sv.Color.from_hex('#FF1493'),
-        radius=8)
-    vertex_annotator_2 = sv.VertexAnnotator(
-        color=sv.Color.from_hex('#00BFFF'),
-        radius=8)
-
-
-    video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
-    videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_DETECTION, video_info)
-    frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
-
-    with videosnk:
-        for frame in tqdm(frame_generator, total=video_info.total_frames, desc="video processing"):
-            result = FIELD_DTECTION_MODEL.predict(frame, conf=0.3)[0]
-            key_points = sv.KeyPoints.from_ultralytics(result)
-            print(key_points.confidence)
-
-            filter = key_points.confidence[0] > 0.5
-            frame_reference_points = key_points.xy[0][filter]
-            frame_reference_key_points = sv.KeyPoints(
-                xy=frame_reference_points[np.newaxis, ...])
-
-            pitch_reference_points = np.array(CONFIG.vertices)[filter]
-
-            transformer = ViewTransformer(
-                source=pitch_reference_points,
-                target=frame_reference_points
-            )
-
-            pitch_all_points = np.array(CONFIG.vertices)
-            frame_all_points = transformer.transform_points(points=pitch_all_points)
-
-            frame_all_key_points = sv.KeyPoints(xy=frame_all_points[np.newaxis, ...])
-
-            annotated_frame = frame.copy()
-            annotated_frame = edge_annotator.annotate(
-                scene=annotated_frame,
-                key_points=frame_all_key_points)
-            annotated_frame = vertex_annotator_2.annotate(
-                scene=annotated_frame,
-                key_points=frame_all_key_points)
-            annotated_frame = vertex_annotator.annotate(
-                scene=annotated_frame,
-                key_points=frame_reference_key_points)
-            print(annotated_frame.shape)
-            videosnk.write_frame(annotated_frame)
-
 #combining both player and pitch detection
 elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
     tracker = sv.ByteTrack()
     tracker.reset()
 
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
-    video_info.fps *= 4
     print(f"Video width: {video_info.width}, height: {video_info.height}, fps: {video_info.fps}")
     videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION, video_info, codec="mp4v")
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
 
     #saving the coordinates of each player on 2D pitch per frame
+
     tracker_history = defaultdict(list)
     last_seen_frame = {}
 
-    MAX_MISSING_FRAMES = 2
-    MIN_TRACK_LENGTH = 2
-    INTERPOLATION_DISTANCE_THRESHOLD = 100
-
-    def filter_duplicates(points, min_distance=5):
-        filtered = []
-        for p in points:
-            if all(np.linalg.norm(np.array(p) - np.array(f)) > min_distance for f in filtered):
-                filtered.append(p)
-        return filtered
-
+    prev_pitch_players_xy = None
+    prev_pitch_ball_xy = None
+    prev_pitch_referees_xy = None
     with videosnk:
         for frame_idx, frame in enumerate(tqdm(frame_generator, total=video_info.total_frames, desc="Processing video")):
             if frame is None:
@@ -278,7 +220,7 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
             merged_detections.class_id = merged_detections.class_id.astype(int)
             
             # Use the field detection model to get pitch keypoints
-            field_result = FIELD_DTECTION_MODEL.predict(frame, conf=0.3)[0]
+            field_result = FIELD_DETECTION_MODEL.predict(frame, conf=0.3)[0]
             key_points = sv.KeyPoints.from_ultralytics(field_result)
             print(key_points.confidence)
 
@@ -306,69 +248,10 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
                 tracker_history[tracker_id].append((frame_idx, player_pos[0], player_pos[1], team_id))
                 last_seen_frame[tracker_id] = frame_idx
 
-
-            # interpolate multiple intermediate frames between t and t+1
-            for sub_step in range(1, 4):
-                alpha = sub_step / 4
-                interpolated_team0 = []
-                interpolated_team1 = []
-
-                for tracker_id, history in tracker_history.items():
-                    if frame_idx - last_seen_frame.get(tracker_id, -MAX_MISSING_FRAMES - 1) > MAX_MISSING_FRAMES:
-                        continue
-                    if len(history) >= MIN_TRACK_LENGTH:
-                        prev = history[-2]
-                        curr = history[-1]
-                        if curr[0] - prev[0] <= MAX_MISSING_FRAMES:
-                            x1, y1, team_id = prev[1], prev[2], prev[3]
-                            x2, y2 = curr[1], curr[2]
-
-                            dist = np.linalg.norm(np.array([x2, y2]) - np.array([x1, y1]))
-                            if dist > INTERPOLATION_DISTANCE_THRESHOLD:
-                                continue
-
-                            interp_x = (1 - alpha) * x1 + alpha * x2
-                            interp_y = (1 - alpha) * y1 + alpha * y2
-
-                            if team_id == 0:
-                                interpolated_team0.append((interp_x, interp_y))
-                            elif team_id == 1:
-                                interpolated_team1.append((interp_x, interp_y))
-
-                interpolated_team0 = filter_duplicates(interpolated_team0)[:11]
-                interpolated_team1 = filter_duplicates(interpolated_team1)[:11]
-
-                interpolated_frame = draw_pitch(CONFIG)
-                interpolated_frame = draw_points_on_pitch(CONFIG, np.array(interpolated_team0), sv.Color.from_hex('00BFFF'), sv.Color.BLACK, radius=16, pitch=interpolated_frame)
-                interpolated_frame = draw_points_on_pitch(CONFIG, np.array(interpolated_team1), sv.Color.from_hex('FF1493'), sv.Color.BLACK, radius=16, pitch=interpolated_frame)
-                interpolated_frame = draw_points_on_pitch(CONFIG, pitch_ball_xy, sv.Color.WHITE, sv.Color.BLACK, radius=10, pitch=interpolated_frame)
-                interpolated_frame = draw_points_on_pitch(CONFIG, pitch_referees_xy, sv.Color.from_hex('FFD700'), sv.Color.BLACK, radius=16, pitch=interpolated_frame)
-
-                interpolated_frame = cv2.resize(interpolated_frame, (video_info.width, video_info.height))
-                try:
-                    videosnk.write_frame(interpolated_frame)
-                except Exception as e:
-                    print(f"Error writing interpolated frame {frame_idx + alpha:.2f}: {e}")
-
-            smoothed_positions_team0 = []
-            smoothed_positions_team1 = []
-
-            for i, tracker_id in enumerate(players_detections.tracker_id):
-                team_id = players_detections.class_id[i]
-                player_pos = pitch_players_xy[i]
-
-                if team_id == 0:
-                    smoothed_positions_team0.append((player_pos[0], player_pos[1]))
-                elif team_id == 1:
-                    smoothed_positions_team1.append((player_pos[0], player_pos[1]))
-
-            smoothed_positions_team0 = filter_duplicates(smoothed_positions_team0)[:11]
-            smoothed_positions_team1 = filter_duplicates(smoothed_positions_team1)[:11]
-
             annotated_frame = draw_pitch(CONFIG)
             annotated_frame = draw_points_on_pitch(
                 config=CONFIG,
-                xy=np.array(smoothed_positions_team0),
+                xy=pitch_players_xy[players_detections.class_id == 0],
                 face_color=sv.Color.from_hex('00BFFF'),
                 edge_color=sv.Color.BLACK,
                 radius=16,
@@ -376,7 +259,7 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
             )
             annotated_frame = draw_points_on_pitch(
                 config=CONFIG,
-                xy=np.array(smoothed_positions_team1),
+                xy=pitch_players_xy[players_detections.class_id == 1],
                 face_color=sv.Color.from_hex('FF1493'),
                 edge_color=sv.Color.BLACK,
                 radius=16,
@@ -406,6 +289,68 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
                 print(f"Frame {frame_idx} written successfully.")
             except Exception as e:
                 print(f"Error writing frame {frame_idx}: {e}")
+
+    videosnk.close()
+
+
+elif TYPE_OF_VIDEO[NUMBER] == "Ball_Detection":
+    MAXLEN = 5
+    BALL_ID = 0
+    path_raw = []
+    M = deque(maxlen=MAXLEN)
+
+    video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
+    print(f"Video width: {video_info.width}, height: {video_info.height}, fps: {video_info.fps}")
+    videosnk = sv.VideoSink(IMAGES_FOLDER_BALL_DETECTION, video_info, codec="mp4v")
+    frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
+
+    with videosnk:
+        for frame in tqdm(frame_generator, total=video_info.total_frames):
+            result = PLAYER_DETECTION_MODEL.predict(frame, conf=0.3)[0]
+            detections = sv.Detections.from_ultralytics(result)
+
+            ball_detections = detections[detections.class_id == BALL_ID]
+            ball_detections.xyxy = sv.pad_boxes(xyxy=ball_detections.xyxy, px=10)
+
+            result = FIELD_DETECTION_MODEL.predict(frame, conf=0.3)[0]
+            key_points = sv.KeyPoints.from_ultralytics(result)
+
+            filter = key_points.confidence[0] > 0.5
+            frame_reference_points = key_points.xy[0][filter]
+            pitch_reference_points = np.array(CONFIG.vertices)[filter]
+
+            transformer = ViewTransformer(
+                source=frame_reference_points,
+                target=pitch_reference_points
+            )
+            M.append(transformer.m)
+            transformer.m = np.mean(np.array(M), axis=0)
+
+            frame_ball_xy = ball_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+            pitch_ball_xy = transformer.transform_points(points=frame_ball_xy)
+
+            path_raw.append(pitch_ball_xy)
+
+            path = [
+                np.empty((0, 2), dtype=np.float32) if coorinates.shape[0] >= 2 else coorinates
+                for coorinates
+                in path_raw
+            ]
+
+            path = [coorinates.flatten() for coorinates in path]
+            annotated_frame = draw_pitch(CONFIG)
+            annotated_frame = draw_paths_on_pitch(
+                config=CONFIG,
+                paths=[path],
+                color=sv.Color.WHITE,
+                pitch=annotated_frame)
+            
+            if annotated_frame is None or annotated_frame.size == 0:
+                print("Warning: annotated_frame is empty, skipping resizing for this frame.")
+                continue 
+            annotated_frame = cv2.resize(annotated_frame, (video_info.width, video_info.height))
+            print(f"Annotated frame shape: {annotated_frame.shape}")
+            videosnk.write_frame(annotated_frame)
     videosnk.close()
                 
 elif NUMBER == 0:
@@ -422,7 +367,7 @@ elif NUMBER == 0:
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
     frame = next(frame_generator)
 
-    result = FIELD_DTECTION_MODEL.predict(frame, conf=0.3)[0]
+    result = FIELD_DETECTION_MODEL.predict(frame, conf=0.3)[0]
     key_points = sv.KeyPoints.from_ultralytics(result)
 
     filter = key_points.confidence[0] > 0.5
@@ -455,6 +400,7 @@ elif NUMBER == 0:
 
     frame_path = os.path.join(IMAGES_FOLDER_PATH, f"frame_{0:03d}.jpg")
     cv2.imwrite(frame_path, annotated_frame)
-        
 
+else:
+    print("None")
 
