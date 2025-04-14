@@ -61,6 +61,42 @@ STRIDE = 30
 #stride used just for dividing the teams
 frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH, stride=STRIDE)
 
+def interpolate_tracker_history(tracker_history, fractions=[0.25, 0.5, 0.75]):
+    """
+    For each tracked player, interpolate extra points between successive frames.
+    
+    Parameters:
+        tracker_history (dict): Dictionary where key is tracker_id and value is a list of tuples:
+                                (frame_index, x, y, team_id).
+        fractions (list): List of fractions in (0,1) at which to interpolate between two frames.
+    
+    Returns:
+        dict: A new dictionary with the same structure but with extra interpolated points.
+    """
+    new_tracker_history = {}
+    for tracker_id, traj in tracker_history.items():
+        # Ensure the trajectory is sorted by frame index
+        traj = sorted(traj, key=lambda x: x[0])
+        new_traj = []
+        for i in range(len(traj) - 1):
+            t0, x0, y0, team_id = traj[i]
+            t1, x1, y1, _ = traj[i + 1]
+
+            # Add the starting point
+            new_traj.append((t0, x0, y0, team_id))
+            
+            dt = t1 - t0
+            for frac in fractions:
+                new_t = t0 + frac * dt
+                new_x = x0 + frac * (x1 - x0)
+                new_y = y0 + frac * (y1 - y0)
+                new_traj.append((new_t, new_x, new_y, team_id))
+        
+        # Append the final point of the trajectory
+        new_traj.append(traj[-1])
+        new_tracker_history[tracker_id] = new_traj
+    return new_tracker_history
+
 crops = []
 for frame in tqdm(frame_generator, desc="collecting crops"):
     result  = PLAYER_DETECTION_MODEL.predict(frame, conf=0.3)[0]
@@ -166,45 +202,49 @@ if TYPE_OF_VIDEO[NUMBER] == "Player_Detection_Video":
             videosnk.write_frame(annotated_frame)
 
 #combining both player and pitch detection
-elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
+if TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
+    # Initialize tracker, video information, and video sink for output frames
     tracker = sv.ByteTrack()
     tracker.reset()
 
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
+    video_info.fps *= 4 
     print(f"Video width: {video_info.width}, height: {video_info.height}, fps: {video_info.fps}")
     videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION, video_info, codec="mp4v")
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
 
-    #saving the coordinates of each player on 2D pitch per frame
-
+    # This dictionary will store each player's position on the 2D pitch per frame.
     tracker_history = defaultdict(list)
-    last_seen_frame = {}
+    ball_history = []
 
-    prev_pitch_players_xy = None
-    prev_pitch_ball_xy = None
-    prev_pitch_referees_xy = None
     with videosnk:
         for frame_idx, frame in enumerate(tqdm(frame_generator, total=video_info.total_frames, desc="Processing video")):
             if frame is None:
                 print(f"Frame {frame_idx} is empty.")
                 continue
             print(f"Processing frame {frame_idx}...")
+
+            # Run detection for players and other objects.
             result = PLAYER_DETECTION_MODEL.predict(frame, conf=0.3)[0]
             detections = sv.Detections.from_ultralytics(result)
 
+            # Process ball detections
             ball_detections = detections[detections.class_id == BALL_ID]
             ball_detections.xyxy = sv.pad_boxes(xyxy=ball_detections.xyxy, px=10)
 
+            # Process all other detections and track them
             all_detections = detections[detections.class_id != BALL_ID]
             all_detections = all_detections.with_nms(threshold=0.5, class_agnostic=True)
             all_detections = tracker.update_with_detections(detections=all_detections)
 
+            # Separate detections for different roles
             goalkeepers_detections = all_detections[all_detections.class_id == GOALKEEPER_ID]
             players_detections = all_detections[all_detections.class_id == PLAYER_ID]
             referees_detections = all_detections[all_detections.class_id == REFEREE_ID]
 
+            # Run team classification on player crops.
             players_crops = [sv.crop_image(frame, xyxy) for xyxy in players_detections.xyxy]
-            if players_crops:  # only predict if there are crops
+            if players_crops:  # Only predict if there are crops.
                 players_detections.class_id = team_classifier.predict(players_crops)
             try:
                 goalkeepers_detections.class_id = resolve_goalkeepers_team_id(players_detections, goalkeepers_detections)
@@ -212,14 +252,14 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
                 print("Error resolving goalkeeper team IDs:", e)
             referees_detections.class_id -= 1
 
+            # Merge detections as needed.
             merged_detections = sv.Detections.merge([
                 players_detections, goalkeepers_detections, referees_detections
             ])
-
             labels = [f"#{tid}" for tid in merged_detections.tracker_id]
             merged_detections.class_id = merged_detections.class_id.astype(int)
             
-            # Use the field detection model to get pitch keypoints
+            # Detect the pitch (field) to get keypoints for transformation.
             field_result = FIELD_DETECTION_MODEL.predict(frame, conf=0.3)[0]
             key_points = sv.KeyPoints.from_ultralytics(field_result)
             print(key_points.confidence)
@@ -233,6 +273,7 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
                 target=pitch_reference_points
             )
 
+            # Transform detections onto the pitch.
             frame_ball_xy = ball_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
             pitch_ball_xy = transformer.transform_points(points=frame_ball_xy)
 
@@ -242,54 +283,84 @@ elif TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
             referees_xy = referees_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
             pitch_referees_xy = transformer.transform_points(points=referees_xy)
 
+            # Update tracker history with the (frame_idx, x, y, team_id) for each player.
             for i, tracker_id in enumerate(players_detections.tracker_id):
                 team_id = players_detections.class_id[i]
                 player_pos = pitch_players_xy[i]
                 tracker_history[tracker_id].append((frame_idx, player_pos[0], player_pos[1], team_id))
-                last_seen_frame[tracker_id] = frame_idx
 
+            ball_xy = ball_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+            if ball_xy is not None and len(ball_xy) > 0:
+                pitch_ball_xy = transformer.transform_points(points=ball_xy)[0]
+                ball_history.append((frame_idx, pitch_ball_xy[0], pitch_ball_xy[1], -1))
+
+        smoothed_tracker_history = interpolate_tracker_history(tracker_history)
+
+        # For easier lookup, build a mapping for each tracker:
+        # mapping: tracker_id -> { time (rounded to 2 decimals): (x, y, team) }
+        smoothed_points = {}
+        for tracker_id, traj in smoothed_tracker_history.items():
+            time_map = {}
+            for t, x, y, team in traj:
+                time_map[round(t, 2)] = (x, y, team)
+            smoothed_points[tracker_id] = time_map
+
+        ball_time_map = {}
+        for t, x, y, team in ball_history:
+            ball_time_map[round(t, 2)] = (x, y, team)
+
+        # Define an interpolation factor. For fractions [0.25, 0.5, 0.75], interp_factor is 4.
+        interp_factor = 4
+        # Global time range in fractional steps. This covers from frame 0 to total_frames.
+        global_times = np.arange(0, video_info.total_frames, step=1.0 / interp_factor)
+
+        # Generate and write each frame based on the global timeline.
+        for t in global_times:
+            t_rounded = round(t, 2)
+            team0_points = []
+            team1_points = []
+
+            # For each tracker, check if there is a smoothed point at the current time.
+            for tracker_id, time_map in smoothed_points.items():
+                if t_rounded in time_map:
+                    x, y, team = time_map[t_rounded]
+                    if team == 0:
+                        team0_points.append([x, y])
+                    elif team == 1:
+                        team1_points.append([x, y])
+            
+            # Create a base pitch image.
             annotated_frame = draw_pitch(CONFIG)
-            annotated_frame = draw_points_on_pitch(
-                config=CONFIG,
-                xy=pitch_players_xy[players_detections.class_id == 0],
-                face_color=sv.Color.from_hex('00BFFF'),
-                edge_color=sv.Color.BLACK,
-                radius=16,
-                pitch=annotated_frame
-            )
-            annotated_frame = draw_points_on_pitch(
-                config=CONFIG,
-                xy=pitch_players_xy[players_detections.class_id == 1],
-                face_color=sv.Color.from_hex('FF1493'),
-                edge_color=sv.Color.BLACK,
-                radius=16,
-                pitch=annotated_frame
-            )
-
-            annotated_frame = draw_points_on_pitch(
-                config=CONFIG,
-                xy=pitch_ball_xy,
-                face_color=sv.Color.WHITE,
-                edge_color=sv.Color.BLACK,
-                radius=10,
-                pitch=annotated_frame
-            )
-            annotated_frame = draw_points_on_pitch(
-                config=CONFIG,
-                xy=pitch_referees_xy,
-                face_color=sv.Color.from_hex('FFD700'),
-                edge_color=sv.Color.BLACK,
-                radius=16,
-                pitch=annotated_frame
-            )
+            if team0_points:
+                annotated_frame = draw_points_on_pitch(
+                    config=CONFIG,
+                    xy=np.array(team0_points),
+                    face_color=sv.Color.from_hex('00BFFF'),
+                    edge_color=sv.Color.BLACK,
+                    radius=16,
+                    pitch=annotated_frame
+                )
+            if team1_points:
+                annotated_frame = draw_points_on_pitch(
+                    config=CONFIG,
+                    xy=np.array(team1_points),
+                    face_color=sv.Color.from_hex('FF1493'),
+                    edge_color=sv.Color.BLACK,
+                    radius=16,
+                    pitch=annotated_frame
+                )
+            if t_rounded.is_integer() and t_rounded in ball_time_map:
+                ball_x, ball_y, _ = ball_time_map[t_rounded]
+                annotated_frame = draw_points_on_pitch(
+                    config=CONFIG,
+                    xy=np.array([[ball_x, ball_y]]),
+                    face_color=sv.Color.from_hex('FFFFFF'),  
+                    edge_color=sv.Color.BLACK,
+                    radius=10,
+                    pitch=annotated_frame
+                )
             annotated_frame = cv2.resize(annotated_frame, (video_info.width, video_info.height))
-            print(f"Annotated frame shape: {annotated_frame.shape}")
-            try:
-                videosnk.write_frame(annotated_frame)
-                print(f"Frame {frame_idx} written successfully.")
-            except Exception as e:
-                print(f"Error writing frame {frame_idx}: {e}")
-
+            videosnk.write_frame(annotated_frame)
     videosnk.close()
 
 
