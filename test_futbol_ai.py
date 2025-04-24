@@ -143,7 +143,6 @@ if TYPE_OF_VIDEO[NUMBER] == "Player_Detection_Video":
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
     videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PLAYER_DETECTION, video_info)
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
-
     with videosnk:
         for frame in tqdm(frame_generator, total=video_info.total_frames, desc="video processing PLAYER DETECTION"):
             result  = PLAYER_DETECTION_MODEL.predict(frame, conf=0.3)[0]
@@ -199,10 +198,10 @@ if TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
     tracker.reset()
 
     video_info = sv.VideoInfo.from_video_path(SOURCE_VIDEO_PATH)
-    video_info.fps *= 4 
     print(f"Video width: {video_info.width}, height: {video_info.height}, fps: {video_info.fps}")
     videosnk = sv.VideoSink(IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION, video_info, codec="mp4v")
     frame_generator = sv.get_video_frames_generator(SOURCE_VIDEO_PATH)
+    frame_count = 0
 
     # 2) Prepare Kalman filters
     kalman_filters = {}                                     # one filter per player tracker_id
@@ -302,6 +301,9 @@ if TYPE_OF_VIDEO[NUMBER] == "All_Detection_Video":
 
             annotated = cv2.resize(annotated, (video_info.width, video_info.height))
             videosnk.write_frame(annotated)
+            frame_count += 1
+    print(f"Wrote {frame_count} frames to {IMAGES_FOLDER_PATH_PITCH_PLAYER_DETECTION}")
+    videosnk.close()
 
 
 
