@@ -3,7 +3,6 @@
 *A reinforcement-learning framework that learns how to exploit an opponent’s weaknesses and outputs match-specific tactical game-plans.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  
-[![CI](https://github.com/YOUR-USER/rl-tactics/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-USER/rl-tactics/actions/workflows/ci.yml)
 
 ---
 
