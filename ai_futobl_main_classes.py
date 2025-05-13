@@ -11,6 +11,8 @@ from kalman_filter import KalmanFilter
 import pandas as pd
 import cv2
 import os
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 
 def interpolate_and_extrapolate_ball_history(ball_history, total_frames, max_interp_gap=10, max_extrap_gap=10, decay=0.85):
@@ -462,7 +464,7 @@ class PitchDetection:
         print("\n✅ Finished pitch detection and annotation.")
 
 class AllDetectionVideo:
-    def __init__(self, config: Config, models: Models, team_classifier: TeamClassifier, CONFIG):
+    def __init__(self, config: Config, models: Models, team_classifier: TeamClassifier, CONFIG, kalman_params):
         self.config = config
         self.models = models
         self.team_classifier = team_classifier
@@ -478,11 +480,11 @@ class AllDetectionVideo:
 
         dt = 1.0 / self.video_info.fps
         self.F = np.array([[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1,  0], [0, 0, 0,  1]])
-        self.B = np.zeros((4, 2))
-        self.H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
-        self.Q = np.diag([0.01, 0.01, 0.5, 0.5])
-        self.R = np.diag([2.0, 2.0])
-        self.P0 = np.eye(4) * 50.0
+        self.B = kalman_params["B"]
+        self.H = kalman_params["H"]
+        self.Q = kalman_params["Q"]
+        self.R = kalman_params["R"]
+        self.P0 = kalman_params["P0"]
 
         self.tracker = sv.ByteTrack()
         self.tracker.reset()
@@ -527,6 +529,7 @@ class AllDetectionVideo:
             goalkeepers = tracked[tracked.class_id == self.GOALKEEPER_ID]
             referees = tracked[tracked.class_id == self.REFEREE_ID]
 
+            #Track player visibility
             detected_ids = set(players.tracker_id if players else [])
             all_ids = set(self.player_visibility.keys()).union(detected_ids)
             for tid in all_ids:
@@ -552,6 +555,7 @@ class AllDetectionVideo:
             ball_detections = ball_detections[ball_detections.class_id == self.BALL_ID]
             ball_detections.xyxy = sv.pad_boxes(ball_detections.xyxy, px=10)
 
+            #Track ball visibility
             ball_detected = ball_detections is not None and len(ball_detections) > 0
             self.ball_visibility.append(ball_detected)
             print(f"{'✅' if ball_detected else '❌'} Ball detected: {len(ball_detections) if ball_detected else 0}")
@@ -614,7 +618,8 @@ class AllDetectionVideo:
             tracker_history=self.tracker_history,
             total_frames=self.video_info.total_frames
         )
-
+        
+        # Makes sure all player visibility lists are the same length as the number of video frames by padding with False.
         max_len = self.video_info.total_frames
         for tid, visibility in self.player_visibility.items():
             if len(visibility) < max_len:
@@ -632,6 +637,8 @@ class AllDetectionVideo:
         Output:
             - Annotated video showing all player and ball trajectories (real and interpolated)
         """
+        # This structure groups all interpolated player positions by frame, which makes it easier to draw them frame-by-frame later.
+        # frame_player_map is a nested dictionary: {frame_idx: {tracker_id: (x, y, team_id)}}
         frame_player_map = defaultdict(dict)
         for tid, records in self.interpolated_tracker_history.items():
             for frame_idx, x, y, team_id in records:
@@ -645,8 +652,16 @@ class AllDetectionVideo:
                 annotated = draw_pitch(self.CONFIG)
 
                 team0_pts, team1_pts = [], []
+                # frame_player_map is a nested dictionary: {frame_idx: {tracker_id: (x, y, team_id)}}
                 for tid, (x, y, team_id) in frame_player_map[frame_idx].items():
+                    # Checks if this player (tid) was actually detected in this frame.
+                    # If the player has never been detected before (not in self.player_visibility),
+                    # we default to a list of all False (i.e., never visible in any frame).
                     if self.player_visibility.get(tid, [False] * self.video_info.total_frames)[frame_idx]:
+                        # Creates a dictionary of real (Kalman-filtered) positions for this player.
+                        # rec[0] = frame index, and rec[1:] = x, y, team_id
+                        #real_frames = {
+                            #frame_idx: (frame_idx, x, y, team_id),
                         real_frames = {rec[0]: rec for rec in self.tracker_history.get(tid, [])}
                         if frame_idx in real_frames and None not in real_frames[frame_idx][1:3]:
                             x, y, team_id = real_frames[frame_idx][1:]
@@ -731,10 +746,10 @@ class AllDetectionVideo:
         pd.DataFrame(player_coords).to_csv(os.path.join(output_folder, "player_coordinates.csv"), index=False)
         print("✅ Player coordinates log saved.")
 
-
-def main():
+@hydra.main(config_path="configs", config_name="kalman")
+def main(cfg: DictConfig):
     # Initialize config, models, and pitch configuration
-    config = Config(NUMBER=1)  # 3 corresponds to "All_Detection_Video"
+    config = Config(NUMBER=3)  # 3 corresponds to "All_Detection_Video"
     models = Models()
     pitch_config = SoccerPitchConfiguration()
     #{0: "None", 1: "Player_Detection_Video", 2: "Pitch_Detection_Video", 3: "All_Detection_Video", 4: "Anotatted_Ball_Detection"}
@@ -754,7 +769,21 @@ def main():
 
     # Step 2: Run the All Detection pipeline
     if config.type_of_video == "All_Detection_Video":
-        pipeline = AllDetectionVideo(config=config, models=models, team_classifier=team_classifier, CONFIG=pitch_config)
+        B = np.array(cfg.kalman.B)
+        H = np.array(cfg.kalman.H)
+        Q = np.diag(cfg.kalman.Q)
+        R = np.diag(cfg.kalman.R)
+        P0 = np.eye(4) * cfg.kalman.P0
+
+        kalman_params = {
+        "B": B,
+        "H": H,
+        "Q": Q,
+        "R": R,
+        "P0": P0
+        }
+
+        pipeline = AllDetectionVideo(config=config, models=models, team_classifier=team_classifier, CONFIG=pitch_config, kalman_params=kalman_params)
 
         # Step 3: Process video and interpolate missing data
         pipeline.detect_and_interpolate()
@@ -765,6 +794,7 @@ def main():
         # Step 5: Export logs
         output_folder = "/home2/s5549329/ml-futbol/frames_player_ball"
         pipeline.export_tracking_tables(output_folder=output_folder)
+
 
     elif config.type_of_video == "Player_Detection_Video":
         detector = PlayerDetection(config=config, models=models, team_classifier=team_classifier)
