@@ -3,48 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>About &middot; My GitHub Pages Site</title>
+  <title>About &middot; AI & Futbol</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       margin: 0;
       padding: 0;
       line-height: 1.6;
+      background: #f0f2f5;
     }
     nav {
-      background: #333;
+      background: #1a1a1a;
+      padding: 0.5em 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     }
     nav ul {
       display: flex;
+      justify-content: center;
       list-style: none;
       margin: 0;
       padding: 0;
     }
     nav li {
-      margin: 0;
+      margin: 0 0.5em;
     }
     nav a {
       display: block;
-      padding: 1em 1.5em;
+      padding: 0.75em 1.25em;
       color: #fff;
       text-decoration: none;
+      border-radius: 12px;
+      transition: background 0.3s;
     }
     nav a:hover {
-      background: #555;
+      background: #333;
     }
-    main {
+    .container {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      margin: 2em auto;
+      max-width: 800px;
+      overflow: hidden;
+    }
+    .content {
       padding: 2em;
+    }
+    .profile {
+      display: block;
+      max-width: 150px;
+      border-radius: 50%;
+      margin: 0 auto 1.5em;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .mission-list {
+      margin-top: 0.5em;
+      padding-left: 1.2em;
+    }
+    .mission-list li {
+      margin-bottom: 0.75em;
     }
     footer {
       text-align: center;
       padding: 1em;
-      background: #f4f4f4;
+      background: transparent;
       font-size: 0.9em;
-    }
-    .profile {
-      max-width: 200px;
-      border-radius: 50%;
-      margin-bottom: 1em;
+      color: #555;
     }
   </style>
 </head>
@@ -58,25 +82,36 @@
       </ul>
     </nav>
   </header>
-
-  <main>
-    <h1>About This Project</h1>
-    <p>Welcome to the AI & Futbol project website! This site showcases our work integrating artificial intelligence with football (not soccer) analytics.</p>
-    <h2>Our Mission</h2>
-    <p>We aim to leverage machine learning and AI to provide deeper insights into player performance, team strategy, and game outcomes.</p>
-    <h2>Team</h2>
-    <ul>
-      <li>Juan Diego Candenas Cartagena – Project Leader, Lectuer and Phd Student at University of Groningen</li>
-      <li>Alexandru Baris Eroglu – Second year Artificial Intelligence student at University of Groningen</li>
-      <li>Bogdan Sandoiu – Second year Artificial Intelligence student at University of Groningen</li>
-      <li>Rares Medelet – Second year Artificial Intelligence student at University of Groningen</li>
-    </ul>
-    <h2>Contact</h2>
-    <p>Feel free to reach out via <a href="a.eroglu@student.rug.nl">info@aifutbol.example.com</a>.</p>
-  </main>
-
+  
+  <div class="container">
+    <div class="content">
+      <h1>About This Project</h1>
+      <p>AI &amp; Futbol uses artificial intelligence to advance football analytics. From player performance to tactical pattern recognition, our project transforms raw game data into actionable insights, providing coaches and analysts with data-driven strategies on and off the field.</p>
+      
+      <h2>Our Mission</h2>
+      <p>At AI &amp; Futbol, our goal is to leverage cutting-edge AI techniques to elevate every aspect of football analytics. Specifically, we aim to:</p>
+      <ul class="mission-list">
+        <li><strong>Enhance Performance:</strong> Build predictive models that forecast player fatigue, strengths, and performance trends.</li>
+        <li><strong>Strategic Insights:</strong> Utilize computer vision to decode play formations and opponent tactics in real time.</li>
+        <li><strong>Data Accessibility:</strong> Design intuitive dashboards and visualizations that make complex analytics easily interpretable.</li>
+        <li><strong>Continuous Innovation:</strong> Experiment with advanced neural architectures and reinforcement learning to stay ahead.</li>
+      </ul>
+      
+      <h2>Team</h2>
+      <ul>
+        <li>Juan Diego Cárdenas Cartagena – Project Leader, Lecturer and PhD Student at University of Groningen</li>
+        <li>Alexandru Baris Eroglu – AI Student (2nd Year) at University of Groningen</li>
+        <li>Bogdan Sandoiu – AI Student (2nd Year) at University of Groningen</li>
+        <li>Rares Medelet – AI Student (2nd Year) at University of Groningen</li>
+      </ul>
+      
+      <h2>Contact</h2>
+      <p>For inquiries, please <a href="mailto:a.eroglu@student.rug.nl">Contact Us</a>.</p>
+    </div>
+  </div>
+  
   <footer>
-    <p>&copy; 2025 AI & FUtbol</p>
+    <p>&copy; 2025 AI &amp; Futbol</p>
   </footer>
 </body>
 </html>
