@@ -3,38 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My GitHub Pages Site</title>
+  <title>Futbol-ML · Home</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       margin: 0;
       padding: 0;
       line-height: 1.6;
+      background: #f0f2f5;
     }
     nav {
-      background: #333;
+      background: #1a1a1a;
+      padding: 0.5em 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     }
     nav ul {
       display: flex;
+      justify-content: flex-start;
       list-style: none;
       margin: 0;
-      padding: 0;
+      padding: 0 1em;
     }
     nav li {
-      margin: 0;
+      margin-right: 1em;
     }
     nav a {
       display: block;
-      padding: 1em 1.5em;
+      padding: 0.75em 1.25em;
       color: #fff;
       text-decoration: none;
+      border-radius: 12px;
+      transition: background 0.3s;
     }
     nav a:hover {
-      background: #555;
+      background: #333;
+    }
+    .container {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      margin: 2em auto;
+      width: 90%;
+      max-width: 1000px;
+      overflow: hidden;
+    }
+    .content {
+      padding: 2em;
     }
     .video-wrapper {
       position: relative;
-      padding-bottom: 56.25%; /* 16:9 aspect ratio */
+      padding-bottom: 56.25%; /* 16:9 */
       height: 0;
       overflow: hidden;
       margin-bottom: 2em;
@@ -47,14 +65,12 @@
       height: 100%;
       border: 0;
     }
-    main {
-      padding: 2em;
-    }
     footer {
       text-align: center;
       padding: 1em;
-      background: #f4f4f4;
+      background: transparent;
       font-size: 0.9em;
+      color: #555;
     }
   </style>
 </head>
@@ -69,22 +85,26 @@
     </nav>
   </header>
 
-  <main>
-    <h1>Welcome to the official website of the Futbol-ML project</h1>
-    <p>This is the home page of your GitHub Pages site. Use the navigation above to explore different sections.</p>
+  <div class="container">
+    <div class="content">
+      <h1>Welcome to the official website of the Futbol-ML project</h1>
+      <p>This is the home page of your GitHub Pages site. Use the navigation above to explore different sections.</p>
 
-    <section>
-      <h2>Featured Video</h2>
-      <div class="video-wrapper">
-        <iframe width="560" height="315"
-                src="https://www.youtube.com/embed/J_JeIeGPJR8"
-                title = "Showcase Homographic Map"
-                frameboarder="0" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-      </div>
-      <p>Check out more videos on the <a href="/videos/">Videos</a> page.</p>
-    </section>
-  </main>
+      <section>
+        <h2>Featured Video</h2>
+        <div class="video-wrapper">
+          <iframe
+            src="https://www.youtube.com/embed/J_JeIeGPJR8"
+            title="Showcase Homographic Map"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen>
+          </iframe>
+        </div>
+        <p>Check out more videos on the <a href="videos/">Videos</a> page.</p>
+      </section>
+    </div>
+  </div>
 
   <footer>
     <p>&copy; 2025 AI & Futbol</p>
