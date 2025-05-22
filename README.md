@@ -10,7 +10,8 @@
 1. [Overview](#overview)
 2. [Roadmap](#roadmap)
 3. [Contributing](#contributing)
-4. [License](#license)
+4. [Documentation](#documentation)
+5. [License](#license)
 
 ---
 
@@ -32,6 +33,22 @@ It does so by training a **reinforcement-learning (RL)** agent in a simulation e
 3. Ensure `pytest` & `pre-commit` hooks pass.  
 
 All contributors must follow our **Code of Conduct**.
+
+---
+
+## Documentation
+
+Full documentation lives in the [`docs/`](docs/) folder:
+
+- [Getting Started](docs/getting_started.md)
+- [Usage Guide](docs/usage.md)
+- [Architecture](docs/architecture.md)
+- [Pitch Modeling](docs/pitch_modeling.md)
+- [Team Classifier](docs/team_classifier.md)
+- [Model Files](docs/models.md)
+- [Output Files](docs/outputs.md)
+- [Data Format](docs/data_format.md)
+- [Developer Guide](docs/developer_guide.md)
 
 ---
 
