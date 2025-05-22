@@ -430,7 +430,7 @@ class AllDetectionVideo:
 
         # Save player coordinates
         player_coords = []
-        for tracker_id, records in self.tracker_history.items():
+        for tracker_id, records in self.interpolated_tracker_history.items():
             for frame_idx, x, y, team_id in records:
                 player_coords.append({
                     "frame_idx": frame_idx,
@@ -443,21 +443,20 @@ class AllDetectionVideo:
         print("✅ Player coordinates log saved.")
 
         # Save ball coordinates
-        ball_coords = [{"frame_idx": frame_idx, "x": x, "y": y} for frame_idx, x, y in self.ball_history]
+        ball_coords = [{"frame_idx": frame_idx, "x": x, "y": y} for frame_idx, (x, y) in self.interpolated_ball_history.items()]
         pd.DataFrame(ball_coords).to_csv(os.path.join(output_folder, "ball_coordinates.csv"), index=False)
         print("✅ Ball coordinates log saved.")
 
         player_records = []
-        proximity = defaultdict(list)
 
         # Create lookup of ball positions
-        ball_lookup = {f: (x, y) for f, x, y in self.ball_history}
+        ball_lookup = dict(self.interpolated_ball_history)
         frame_to_possession = {}
 
         for frame_idx in range(self.video_info.total_frames):
             players_in_frame = []
 
-            for tracker_id, records in self.tracker_history.items():
+            for tracker_id, records in self.interpolated_tracker_history.items():
                 record_dict = {rec[0]: rec for rec in records}
                 if frame_idx in record_dict:
                     _, x, y, team_id = record_dict[frame_idx]
@@ -475,7 +474,7 @@ class AllDetectionVideo:
 
             # Determine who has possession
             player_with_ball = min(players_in_frame, key=lambda p: p["distance_to_ball"]) if players_in_frame else None
-            possession_team = player_with_ball["team_id"] if player_with_ball and player_with_ball["distance_to_ball"] < 3.0 else -1  # Threshold in pitch units
+            possession_team = player_with_ball["team_id"] if player_with_ball else -1  
 
             for player in players_in_frame:
                 player_records.append({

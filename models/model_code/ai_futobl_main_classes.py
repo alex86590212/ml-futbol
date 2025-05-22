@@ -28,7 +28,7 @@ REFEREE_ID = 3
 @hydra.main(config_path="/home2/s5549329/scripts/ml-futbol/configs", config_name="kalman", version_base=None)
 def main(cfg: DictConfig):
     # Initialize config, models, and pitch configuration
-    config = Config(NUMBER=1)  # 3 corresponds to "All_Detection_Video"
+    config = Config(NUMBER=3)  # 3 corresponds to "All_Detection_Video"
     models = Models()
     pitch_config = SoccerPitchConfiguration()
     #{0: "None", 1: "Player_Detection_Video", 2: "Pitch_Detection_Video", 3: "All_Detection_Video", 4: "Anotatted_Ball_Detection"}
