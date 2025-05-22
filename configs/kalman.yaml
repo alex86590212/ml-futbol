@@ -4,3 +4,8 @@ kalman:
   Q: [0.01, 0.01, 0.5, 0.5]
   R: [2.0, 2.0]
   P0: 50.0
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
