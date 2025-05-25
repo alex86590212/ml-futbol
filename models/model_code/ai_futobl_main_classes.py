@@ -18,6 +18,7 @@ from all_detection_video import AllDetectionVideo
 from ball_detection_video import BallDetection
 from pitch_detection_video import PitchDetection
 from player_detection_video import PlayerDetection
+from clean_frames_video import CleanVideo
 from config_models import Config, Models
 
 BALL_ID = 0
@@ -28,7 +29,7 @@ REFEREE_ID = 3
 @hydra.main(config_path="/home2/s5549329/scripts/ml-futbol/configs", config_name="kalman", version_base=None)
 def main(cfg: DictConfig):
     # Initialize config, models, and pitch configuration
-    config = Config(NUMBER=3)  # 3 corresponds to "All_Detection_Video"
+    config = Config(NUMBER=5)  # 3 corresponds to "All_Detection_Video"
     models = Models()
     pitch_config = SoccerPitchConfiguration()
     #{0: "None", 1: "Player_Detection_Video", 2: "Pitch_Detection_Video", 3: "All_Detection_Video", 4: "Anotatted_Ball_Detection"}
@@ -87,6 +88,11 @@ def main(cfg: DictConfig):
 
     elif config.type_of_video == "Anotatted_Ball_Detection":
         detector = BallDetection(config=config, models=models)
+        detector.detect_and_save()
+        detector._log_summary()
+
+    elif config.type_of_video == "Clean_Frames":
+        detector = CleanVideo(config=config, models=models)
         detector.detect_and_save()
         detector._log_summary()
     
