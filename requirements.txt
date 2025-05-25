@@ -6,6 +6,7 @@ umap-learn>=0.5.3
 transformers
 sentencepiece
 protobuf
+gym
 
 # Data manipulation
 numpy>=1.21.0

@@ -189,6 +189,7 @@ class AllDetectionVideo:
         self.ball_history = []
         self.player_visibility = defaultdict(list)
         self.ball_visibility = []
+        self.ball_velocity_history = []
        
     def detect_and_interpolate(self):
         """
@@ -281,6 +282,13 @@ class AllDetectionVideo:
                 )
                 self.ball_kf.predict(u=np.zeros(2))
                 x = self.ball_kf.update(pitch_ball_xy)
+                if self.ball_history:
+                    last_frame_idx, last_x, last_y = self.ball_history[-1]
+                    dt = frame_idx - last_frame_idx
+                    if dt > 0:
+                        vx = (x[0] - last_x) / dt
+                        vy = (x[1] - last_y) / dt
+                        self.ball_velocity_history.append((frame_idx, vx, vy))
                 self.ball_history.append((frame_idx, x[0], x[1]))
             elif self.ball_kf:
                 self.ball_kf.predict(u=np.zeros(2))
@@ -493,6 +501,24 @@ class AllDetectionVideo:
                 "team_1_possession": possession_team == 1
             }
 
+            team0_players = [(p["x"], p["y"]) for p in players_in_frame if p["team_id"] == 0]
+            team1_players = [(p["x"], p["y"]) for p in players_in_frame if p["team_id"] == 1]
+
+            centroids_spread = {}
+            if team0_players:
+                t0 = np.array(team0_players)
+                centroids_spread["team_0_centroid_x"] = t0[:, 0].mean()
+                centroids_spread["team_0_centroid_y"] = t0[:, 1].mean()
+                centroids_spread["team_0_spread"] = np.linalg.norm(t0 - t0.mean(axis=0), axis=1).mean()
+
+            if team1_players:
+                t1 = np.array(team1_players)
+                centroids_spread["team_1_centroid_x"] = t1[:, 0].mean()
+                centroids_spread["team_1_centroid_y"] = t1[:, 1].mean()
+                centroids_spread["team_1_spread"] = np.linalg.norm(t1 - t1.mean(axis=0), axis=1).mean()
+
+            frame_to_possession[frame_idx].update(centroids_spread)
+
         # Save player coordinates + possession
         pd.DataFrame(player_records).to_csv(os.path.join(output_folder, "player_coordinates.csv"), index=False)
         print("✅ Player coordinates (with possession) log saved.")
@@ -501,3 +527,31 @@ class AllDetectionVideo:
         pd.DataFrame.from_dict(frame_to_possession, orient="index").to_csv(
             os.path.join(output_folder, "team_possession.csv"), index=False)
         print("✅ Team possession log saved.")
+
+        player_velocities = []
+
+        for tracker_id, records in self.interpolated_tracker_history.items():
+            records = sorted(records, key=lambda r: r[0])
+            for i in range(1, len(records)):
+                f0, x0, y0, _ = records[i - 1]
+                f1, x1, y1, _ = records[i]
+                dt = f1 - f0
+                if dt > 0:
+                    vx = (x1 - x0) / dt
+                    vy = (y1 - y0) / dt
+                    player_velocities.append({
+                        "frame_idx": f1,
+                        "tracker_id": tracker_id,
+                        "vx": vx,
+                        "vy": vy
+                    })
+                    
+        pd.DataFrame(player_velocities).to_csv(os.path.join(output_folder, "player_velocities.csv"), index=False)
+        print("✅ Player velocity log saved.")
+
+        ball_vel_df = pd.DataFrame([
+            {"frame_idx": f, "vx": vx, "vy": vy}
+            for f, vx, vy in self.ball_velocity_history
+        ])
+        ball_vel_df.to_csv(os.path.join(output_folder, "ball_velocity.csv"), index=False)
+        print("✅ Ball velocity log saved.")
