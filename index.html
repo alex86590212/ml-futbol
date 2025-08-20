@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Futbol-ML · Home</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      line-height: 1.6;
+      background: linear-gradient(-45deg, #1a1a1a, #3a3939, #807f7f, #919090);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+    }
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    nav {
+      background: rgba(26, 26, 26, 0.8);
+      padding: 0.5em 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(5px);
+    }
+    nav ul {
+      display: flex;
+      justify-content: flex-start;
+      list-style: none;
+      margin: 0;
+      padding: 0 1em;
+    }
+    nav li {
+      margin-right: 1em;
+    }
+    nav a {
+      display: block;
+      padding: 0.75em 1.25em;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: background 0.3s;
+    }
+    nav a:hover {
+      background: #333;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      margin: 2em auto;
+      width: 90%;
+      max-width: 1000px;
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+    }
+    .content {
+      padding: 2em;
+    }
+    .video-wrapper {
+      position: relative;
+      padding-bottom: 56.25%; /* 16:9 */
+      height: 0;
+      overflow: hidden;
+      margin-bottom: 2em;
+    }
+    .video-wrapper iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 12px;
+    }
+    .btn-upcoming {
+      display: inline-block;
+      margin-top: 1em;
+      padding: 0.75em 1.5em;
+      background: #1a1a1a;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      transition: background 0.3s, transform 0.2s;
+    }
+    .btn-upcoming:hover {
+      background: #333;
+      transform: translateY(-2px);
+    }
+    footer {
+      text-align: center;
+      padding: 1em;
+      background: transparent;
+      font-size: 0.9em;
+      color: #eee;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <ul>
+        <li><a href="./">Home</a></li>
+        <li><a href="process/">Process</a></li>
+        <li><a href="about/">About</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div class="content">
+      <h1>Welcome to the Futbol-ML Project</h1>
+      <p>Discover how we merge state-of-the-art AI with football analytics to unlock next-level performance insights and strategic innovations.</p>
+      <a href="upcoming/" class="btn-upcoming">Upcoming</a>
+
+      <section>
+        <h2>Featured Video</h2>
+        <div class="video-wrapper">
+          <iframe
+            src="https://www.youtube.com/embed/J_JeIeGPJR8"
+            title="Showcase Homographic Map"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen>
+          </iframe>
+        </div>
+        <p>Check out more videos on the process page which explains the whole pipeline.  <a href="process/" class="btn-upcoming">Process</a> </p>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2025 AI & Futbol</p>
+  </footer>
+</body>
+</html>

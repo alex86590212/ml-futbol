@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Futbol-ML · Process</title>
+  <style>
+    /* Animated gradient background */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0; padding: 0; line-height: 1.6;
+      background: linear-gradient(-45deg, #1a1a1a, #3a3939, #807f7f, #919090);
+      background-size: 400% 400%; animation: gradientBG 15s ease infinite;
+    }
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    /* Navigation */
+    nav { background: rgba(26,26,26,0.8); padding: 0.5em 0; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          position: sticky; top: 0; backdrop-filter: blur(5px); z-index:1; }
+    nav ul { display:flex; list-style:none; margin:0; padding:0 1em; }
+    nav li { margin-right:1em; }
+    nav a { display:block; padding:0.75em 1.25em; color:#fff; text-decoration:none;
+            border-radius:12px; transition: background 0.3s; }
+    nav a:hover { background:#333; }
+    /* Container */
+    .container { background: rgba(255,255,255,0.9); border-radius:16px;
+                box-shadow:0 4px 20px rgba(0,0,0,0.1); margin:2em auto;
+                width:90%; max-width:1000px; overflow:hidden; backdrop-filter:blur(8px); }
+    .content { padding:2em; }
+    /* Media wrappers */
+    .video-wrapper, .map-wrapper {
+      margin:2em 0; border-radius:12px; overflow:hidden;
+      box-shadow:0 2px 10px rgba(0,0,0,0.1);
+    }
+    .video-wrapper iframe, .video-wrapper video,
+    .map-wrapper img {
+      display:block; width:100%; height:auto;
+    }
+    /* Section titles */
+    section h2 { margin-top:1.5em; }
+    footer { text-align:center; padding:1em; background:transparent;
+             font-size:0.9em; color:#eee; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <ul>
+        <li><a href="../">Home</a></li>
+        <li><a href="./">Process</a></li>
+        <li><a href="../about/">About</a></li>
+      </ul>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="content">
+      <h1>Processing Pipeline Overview</h1>
+      <!-- 1. Raw Video -->
+      <section>
+        <h2>1. Raw Football Video</h2>
+        <div class="video-wrapper">
+          <video controls>
+            <source src="/assets/videos/raw_game.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+        <p>This is the original, unprocessed footage of the football match, captured at 60fps with a 4K resolution. It serves as the input to our analytics pipeline.</p>
+      </section>
+      <!-- 2. Players Detected -->
+      <section>
+        <h2>2. Players Detection Overlay</h2>
+        <div class="video-wrapper">
+          <video controls>
+            <source src="/assets/videos/players_detected.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+        <p>Our model identifies and tracks player positions in each frame, overlaying bounding boxes to highlight individual athletes in real time.</p>
+      </section>
+      <!-- 3. Ball Detection -->
+      <section>
+        <h2>3. Ball Detection Overlay</h2>
+        <div class="video-wrapper">
+          <video controls>
+            <source src="/assets/videos/ball_detected.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+        <p>Next, the ball detection stage isolates the football’s trajectory, enabling precise tracking of passes, shots, and movement patterns.</p>
+      </section>
+      <!-- 4. Homographic Map -->
+      <section>
+        <h2>4. Generated Homographic Map</h2>
+        <div class="map-wrapper">
+          <img src="/assets/images/homographic_map.png" alt="Homographic Map">
+        </div>
+        <p>Finally, we transform the overhead camera view into a top-down homographic projection, mapping player and ball coordinates onto the field blueprint for tactical analysis.</p>
+      </section>
+    </div>
+  </div>
+  <footer>
+    <p>&copy; 2025 AI &amp; Futbol</p>
+  </footer>
+</body>
+</html>
